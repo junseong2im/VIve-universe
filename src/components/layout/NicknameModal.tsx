@@ -19,8 +19,9 @@ export function NicknameModal() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (name.trim().length < 2) return;
-    setNickname(name.trim());
+    const clean = name.replace(/[<>"'&]/g, '').trim();
+    if (clean.length < 2 || clean.length > 20) return;
+    setNickname(clean);
     setPhase(0);
     setTimeout(() => setShow(false), 400);
   };
@@ -48,7 +49,7 @@ export function NicknameModal() {
           {/* Icon */}
           <div className="w-16 h-16 mx-auto mb-6 rounded-2xl flex items-center justify-center"
                style={{ background: 'linear-gradient(135deg, rgba(124,58,237,0.2), rgba(236,72,153,0.1))', border: '1px solid var(--border-dim)' }}>
-            <span className="text-3xl">🚀</span>
+            <span className="text-2xl" style={{ color: 'var(--accent-star)' }}>V</span>
           </div>
 
           <h2 className="text-2xl font-bold text-center mb-2" style={{ color: 'var(--text-bright)' }}>

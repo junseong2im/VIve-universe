@@ -20,6 +20,7 @@ export default function ArenaPage() {
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [eloChange, setEloChange] = useState<{ winner: number; loser: number } | null>(null);
+  const [voteCooldown, setVoteCooldown] = useState(false);
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
 
@@ -38,21 +39,33 @@ export default function ArenaPage() {
 
   const generateMatch = useCallback(() => {
     if (ratings.length < 2) return;
-    // Pick two random teams with similar Elo for fairer matchups
-    const shuffled = [...ratings].sort(() => Math.random() - 0.5);
+    // Pick two random teams, exclude user's own team for fair blind voting
+    let pool = [...ratings];
+    if (user?.teamCode) pool = pool.filter(t => t.teamCode !== user.teamCode);
+    if (pool.length < 2) pool = [...ratings]; // fallback if not enough
+    const shuffled = pool.sort(() => Math.random() - 0.5);
     setMatchA(shuffled[0]);
     setMatchB(shuffled[1]);
     setVoted(null);
     setEloChange(null);
-  }, [ratings]);
+  }, [ratings, user?.teamCode]);
 
   useEffect(() => {
     if (ratings.length >= 2 && !matchA) generateMatch();
   }, [ratings, matchA, generateMatch]);
 
   const handleVote = (winner: ArenaTeamRating, loser: ArenaTeamRating) => {
-    if (voted) return;
+    if (voted || voteCooldown) return;
+
+    // Block voting on own team
+    if (user?.teamCode && (winner.teamCode === user.teamCode || loser.teamCode === user.teamCode)) {
+      showToast('자기 팀이 포함된 매치에는 투표할 수 없습니다');
+      return;
+    }
+
     setVoted(winner.teamCode);
+    setVoteCooldown(true);
+    setTimeout(() => setVoteCooldown(false), 3000);
 
     // Calculate Elo
     const { newWinnerRating, newLoserRating } = updateElo(winner.elo, loser.elo);

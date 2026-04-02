@@ -47,8 +47,16 @@ export default function MarketPage() {
     if (item.sellerTeamCode === user?.teamCode) { showToast('자기 팀 아이템은 구매할 수 없습니다', 'error'); return; }
     if (!deductPoints(item.price)) { showToast(`VP가 부족합니다! (필요: ${item.price}VP)`, 'error'); return; }
 
+    // Re-read to prevent race condition / double-buy
     const allItems = getData<MarketItem[]>(STORAGE_KEYS.MARKET) || [];
     const idx = allItems.findIndex(i => i.id === item.id);
+    if (idx === -1 || allItems[idx].sold) {
+      // Refund if item already sold
+      addPoints(item.price);
+      showToast('이미 판매된 아이템입니다', 'error');
+      loadData();
+      return;
+    }
     if (idx !== -1) {
       allItems[idx].sold = true;
       allItems[idx].buyerTeamCode = user?.teamCode || 'buyer';
@@ -72,13 +80,19 @@ export default function MarketPage() {
   const handleSell = (e: React.FormEvent) => {
     e.preventDefault();
     if (!user?.teamCode) { showToast('팀에 가입해야 판매할 수 있습니다', 'error'); return; }
-    if (!newItem.title.trim() || !newItem.promptContent.trim()) return;
+    const cleanTitle = newItem.title.replace(/[<>"'&]/g, '').trim().slice(0, 50);
+    const cleanDesc = newItem.description.replace(/[<>"'&]/g, '').trim().slice(0, 200);
+    const cleanContent = newItem.promptContent.trim().slice(0, 2000);
+    if (!cleanTitle || !cleanContent) return;
+    if (newItem.price < 50 || newItem.price > 10000 || !Number.isFinite(newItem.price)) {
+      showToast('가격은 50~10000VP 사이여야 합니다', 'error'); return;
+    }
 
     const allItems = getData<MarketItem[]>(STORAGE_KEYS.MARKET) || [];
     allItems.push({
       id: `market_${Date.now()}`, sellerTeamCode: user.teamCode, sellerTeamName: user.nickname || 'Anonymous',
-      title: newItem.title.trim(), description: newItem.description.trim(), promptContent: newItem.promptContent,
-      category: newItem.category, price: newItem.price, sold: false, buyerTeamCode: null,
+      title: cleanTitle, description: cleanDesc, promptContent: cleanContent,
+      category: newItem.category, price: Math.floor(newItem.price), sold: false, buyerTeamCode: null,
       createdAt: new Date().toISOString(),
     });
     setData(STORAGE_KEYS.MARKET, allItems);

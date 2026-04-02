@@ -42,12 +42,21 @@ function CampContent() {
   // ===== CREATE TEAM =====
   const handleCreateTeam = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTeam.name.trim()) return;
+    const cleanName = newTeam.name.replace(/[<>"'&]/g, '').trim().slice(0, 20);
+    if (!cleanName || cleanName.length < 2) return;
+
+    // Check duplicate team name
+    const existing = getData<Team[]>(STORAGE_KEYS.TEAMS) || [];
+    if (existing.some(t => t.name.toLowerCase() === cleanName.toLowerCase())) {
+      showToast('같은 이름의 팀이 이미 존재합니다'); return;
+    }
+
+    const cleanIntro = newTeam.intro.replace(/[<>"'&]/g, '').trim().slice(0, 300);
     const teamCode = `T-${Date.now().toString(36).toUpperCase()}`;
     const team: Team = {
-      teamCode, hackathonSlug: newTeam.hackathonSlug, name: newTeam.name.trim(), isOpen: true, memberCount: 1,
-      lookingFor: newTeam.lookingFor.split(',').map(s => s.trim()).filter(Boolean),
-      intro: newTeam.intro, contact: { type: 'link', url: newTeam.contactUrl }, createdAt: new Date().toISOString(),
+      teamCode, hackathonSlug: newTeam.hackathonSlug, name: cleanName, isOpen: true, memberCount: 1,
+      lookingFor: newTeam.lookingFor.split(',').map(s => s.replace(/[<>"'&]/g, '').trim()).filter(Boolean).slice(0, 5),
+      intro: cleanIntro, contact: { type: 'link', url: newTeam.contactUrl.slice(0, 200) }, createdAt: new Date().toISOString(),
     };
     const allTeams = getData<Team[]>(STORAGE_KEYS.TEAMS) || [];
     allTeams.push(team);
@@ -87,12 +96,14 @@ function CampContent() {
   const handleCreatePrompt = (e: React.FormEvent) => {
     e.preventDefault();
     if (!user?.teamCode) { showToast('팀에 먼저 가입하세요!'); return; }
-    if (!newPrompt.title.trim() || !newPrompt.content.trim()) return;
+    const cleanTitle = newPrompt.title.replace(/[<>"'&]/g, '').trim().slice(0, 50);
+    const cleanContent = newPrompt.content.trim().slice(0, 3000);
+    if (!cleanTitle || !cleanContent) return;
 
-    const vars: PromptVariable[] = newPrompt.variables.split(',').map(v => v.trim()).filter(Boolean)
-      .map(v => ({ name: v, placeholder: v }));
+    const vars: PromptVariable[] = newPrompt.variables.split(',').map(v => v.replace(/[<>"'&]/g, '').trim()).filter(Boolean).slice(0, 10)
+      .map(v => ({ name: v.slice(0, 30), placeholder: v.slice(0, 30) }));
     const prompt: PromptTemplate = {
-      id: `prompt_${Date.now()}`, teamCode: user.teamCode, title: newPrompt.title.trim(), content: newPrompt.content,
+      id: `prompt_${Date.now()}`, teamCode: user.teamCode, title: cleanTitle, content: cleanContent,
       variables: vars, version: 'v1.0', previousVersionId: null, authorNickname: user.nickname || 'Anonymous',
       createdAt: new Date().toISOString(),
     };
@@ -130,7 +141,11 @@ function CampContent() {
 
   const buildPromptText = (prompt: PromptTemplate, vars: Record<string, string>) => {
     let text = prompt.content;
-    prompt.variables.forEach(v => { text = text.replace(new RegExp(`\\{\\{${v.name}\\}\\}`, 'g'), vars[v.name] || `[${v.placeholder}]`); });
+    prompt.variables.forEach(v => {
+      // Escape regex special chars to prevent ReDoS
+      const escaped = v.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      text = text.replace(new RegExp(`\\{\\{${escaped}\\}\\}`, 'g'), vars[v.name] || `[${v.placeholder}]`);
+    });
     return text;
   };
 
